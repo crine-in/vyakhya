@@ -183,6 +183,98 @@ func TestAPIServer(t *testing.T) {
 		}
 	})
 
+	t.Run("Random Endpoint Default", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/random", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+
+		var results []wordnet.WordResult
+		if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+			t.Fatalf("Failed to parse random body: %v", err)
+		}
+
+		if len(results) != 1 {
+			t.Errorf("Expected 1 random word, got %d", len(results))
+		}
+
+		if results[0].Word == "" {
+			t.Error("Expected word result to have a non-empty Word field")
+		}
+	})
+
+	t.Run("Random Endpoint Alias", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/random", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+
+		var results []wordnet.WordResult
+		if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+			t.Fatalf("Failed to parse random alias body: %v", err)
+		}
+
+		if len(results) != 1 {
+			t.Errorf("Expected 1 random word, got %d", len(results))
+		}
+	})
+
+	t.Run("Random Endpoint with lim=5", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/random?lim=5", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+
+		var results []wordnet.WordResult
+		if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+			t.Fatalf("Failed to parse random body: %v", err)
+		}
+
+		if len(results) != 5 {
+			t.Errorf("Expected 5 random words, got %d", len(results))
+		}
+
+		// Ensure no duplicates in the response
+		seen := make(map[string]bool)
+		for _, res := range results {
+			if res.Word == "" {
+				t.Error("Expected word result to have a non-empty Word field")
+			}
+			if seen[res.Word] {
+				t.Errorf("Found duplicate word %q in random results", res.Word)
+			}
+			seen[res.Word] = true
+		}
+	})
+
+	t.Run("Random Endpoint cap at max 20", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/random?lim=50", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+
+		var results []wordnet.WordResult
+		if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+			t.Fatalf("Failed to parse random body: %v", err)
+		}
+
+		if len(results) != 20 {
+			t.Errorf("Expected capped 20 random words, got %d", len(results))
+		}
+	})
+
 	t.Run("Landing Page Embedded Files", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/", nil)
 		w := httptest.NewRecorder()

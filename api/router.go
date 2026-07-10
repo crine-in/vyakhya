@@ -77,6 +77,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/stats", s.handleStats)
 	mux.HandleFunc("GET /api/v1/word/{word}", s.handleWordLookup)
 	mux.HandleFunc("GET /api/v1/suggest", s.handleSuggest)
+	mux.HandleFunc("GET /api/v1/random", s.handleRandom)
+	mux.HandleFunc("GET /random", s.handleRandom)
 	mux.HandleFunc("GET /api/v1/openapi.json", s.handleOpenAPI)
 
 	// UI and docs endpoints
@@ -149,6 +151,32 @@ func (s *Server) handleSuggest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(suggestions)
+}
+
+func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
+	lim := 1
+	if limStr := r.URL.Query().Get("lim"); limStr != "" {
+		if parsed, err := strconv.Atoi(limStr); err == nil && parsed > 0 {
+			lim = parsed
+		}
+	} else if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			lim = parsed
+		}
+	}
+
+	if lim > 20 {
+		lim = 20
+	}
+
+	results := s.Index.Random(lim)
+	if results == nil {
+		results = []*wordnet.WordResult{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(results)
 }
 
 func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
@@ -311,6 +339,72 @@ const OpenAPISpec = `{
                   "type": "array",
                   "items": { "type": "string" },
                   "example": ["happy", "happiness", "happily"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/random": {
+      "get": {
+        "summary": "Random Word Info",
+        "description": "Retrieve random word details (definitions, examples, relations, etc.) as an array.",
+        "parameters": [
+          {
+            "name": "lim",
+            "in": "query",
+            "required": false,
+            "description": "Number of random words to retrieve (default is 1, max is 20)",
+            "schema": { "type": "integer", "default": 1, "maximum": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "word": { "type": "string", "example": "happy" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/random": {
+      "get": {
+        "summary": "Random Word Info (Alias)",
+        "description": "Retrieve random word details (definitions, examples, relations, etc.) as an array.",
+        "parameters": [
+          {
+            "name": "lim",
+            "in": "query",
+            "required": false,
+            "description": "Number of random words to retrieve (default is 1, max is 20)",
+            "schema": { "type": "integer", "default": 1, "maximum": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "word": { "type": "string", "example": "happy" }
+                    }
+                  }
                 }
               }
             }

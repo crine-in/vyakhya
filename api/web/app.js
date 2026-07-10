@@ -359,6 +359,47 @@ async function performSearch(word) {
     }
 }
 
+// Fetch and display a random word from the /random endpoint
+async function performRandomSearch() {
+    const resultsArea = document.getElementById('results-area');
+    resultsArea.innerHTML = '<div class="welcome-screen"><div class="welcome-heading">Selecting random word...</div><div class="welcome-desc">Querying WordNet database...</div></div>';
+
+    try {
+        const response = await fetch('/api/v1/random?lim=1');
+        if (!response.ok) {
+            resultsArea.innerHTML = `
+                <div class="welcome-screen">
+                    <div class="welcome-heading" style="color: #aa4444;">Error</div>
+                    <div class="welcome-desc">Failed to retrieve a random word from the server.</div>
+                </div>`;
+            return;
+        }
+
+        const data = await response.json();
+        if (data && data.length > 0) {
+            const wordData = data[0];
+            currentWordData = wordData;
+            renderResult(wordData);
+            addToHistory(wordData.word);
+            document.getElementById('search-input').value = wordData.word;
+            document.getElementById('clear-btn').style.display = 'block';
+        } else {
+            resultsArea.innerHTML = `
+                <div class="welcome-screen">
+                    <div class="welcome-heading" style="color: #666;">No Words Found</div>
+                    <div class="welcome-desc">The dictionary database returned an empty response.</div>
+                </div>`;
+        }
+    } catch (err) {
+        console.error("Random search error:", err);
+        resultsArea.innerHTML = `
+            <div class="welcome-screen">
+                <div class="welcome-heading" style="color: #aa4444;">Connection Failed</div>
+                <div class="welcome-desc">Unable to establish connection to the Vyākhyā API server. Verify server status.</div>
+            </div>`;
+    }
+}
+
 // Render word lookups inside results area
 function renderResult(data) {
     const resultsArea = document.getElementById('results-area');

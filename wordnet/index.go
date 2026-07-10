@@ -18,6 +18,7 @@ package wordnet
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -384,6 +385,46 @@ func (idx *Index) Suggest(prefix string, limit int) []string {
 					return results
 				}
 			}
+		}
+	}
+	return results
+}
+
+// Random returns a list of lim random WordResults from the index.
+func (idx *Index) Random(lim int) []*WordResult {
+	idx.mu.RLock()
+	n := len(idx.sortedNormKeys)
+	if n == 0 {
+		idx.mu.RUnlock()
+		return nil
+	}
+
+	if lim > n {
+		lim = n
+	}
+
+	// Select random keys
+	keys := make([]string, 0, lim)
+	seen := make(map[string]bool)
+
+	maxAttempts := lim * 5
+	attempts := 0
+	for len(keys) < lim && attempts < maxAttempts {
+		attempts++
+		randIdx := rand.IntN(n)
+		key := idx.sortedNormKeys[randIdx]
+		if !seen[key] {
+			seen[key] = true
+			keys = append(keys, key)
+		}
+	}
+	idx.mu.RUnlock()
+
+	// Now lookup the keys
+	results := make([]*WordResult, 0, len(keys))
+	for _, key := range keys {
+		if res, ok := idx.Lookup(key); ok {
+			results = append(results, res)
 		}
 	}
 	return results
