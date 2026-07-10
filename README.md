@@ -1,11 +1,15 @@
-# Vyakhya — High-Performance WordNet Dictionary API & Explorer
+# Vyakhya — High-Performance English Dictionary API
+
+<p align="center">
+  <img src="vyakhya.svg" alt="Vyakhya Logo" width="220"/>
+</p>
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8.svg?style=flat&logo=go)](https://go.dev/)
 [![Lookup Speed](https://img.shields.io/badge/Lookup_Speed-%3C4_microseconds-brightgreen.svg)]()
-[![Memory Footprint](https://img.shields.io/badge/Memory_Footprint-~346_MB-orange.svg)]()
+[![Memory Footprint](https://img.shields.io/badge/Memory_Footprint-~180_MB-brightgreen.svg)]()
 
-**Vyākhyā** (**व्याख्या**, **/ʋjɑː.kʰjɑː/**) is a dependency-free, high-performance, in-memory English Dictionary API and visual explorer built in Go, powered by the Open English WordNet JSON dataset.
+**Vyākhyā** (**व्याख्या**, **/ʋjɑː.kʰjɑː/**) is a dependency-free, high-performance, in-memory English Dictionary API built in Go, powered by the Open English WordNet JSON dataset.
 
 It is designed to serve rich word definitions, synonyms, and multi-hop semantic relations with microsecond latency while keeping memory usage extremely optimized.
 
@@ -15,11 +19,13 @@ It is designed to serve rich word definitions, synonyms, and multi-hop semantic 
 
 - **Average Lookup Latency**: **~3.2 microseconds** per query ($O(1)$ lookup complexity).
 - **Throughput**: Handles **300,000+ requests per second** per CPU core.
-- **Startup & Load Time**: Indexes the entire 73-file WordNet JSON dataset (~75MB raw JSON) in **~1.4 seconds**.
-- **RAM Footprint**: **~346 MB RAM** in-memory post-garbage collection.
+- **Startup & Load Time**: Indexes the entire 73-file WordNet JSON dataset (~75MB raw JSON) in **~5.3 seconds** using streaming decoders.
+- **RAM Footprint**: **~180 MB RAM** in-memory post-garbage collection.
 
 ### 📈 HTTP API Stress Test Results
+
 Under a local benchmark stress test (using Apache Bench `ab -n 100000 -c 100 -k` against the `/api/v1/word/happy` lookup endpoint):
+
 - **Throughput**: **~12,963 requests per second** (mean).
 - **Latency (mean)**: **0.077 ms** (across all concurrent requests).
 - **99th Percentile Latency**: **10 ms** (99% of requests completed under 10ms).
@@ -30,6 +36,9 @@ Under a local benchmark stress test (using Apache Bench `ab -n 100000 -c 100 -k`
 ## ✨ Features
 
 - **Zero-Dependency**: Built entirely on Go's standard library for maximum stability, portability, and compilation optimization.
+- **Ultra-Low Memory Footprint**: Uses a global string interner, unified relation slices, and slice-based pos entry representations to reduce idle memory usage to under 180MB.
+- **Security Throttling**: Embedded IP token-bucket rate limiter middleware to protect endpoints from abuse, spikes, and denial of service.
+- **Environment-Driven Limits**: Support for configuring rate limits (`RATE_LIMIT_RPS`, `RATE_LIMIT_BURST`), memory target bounds (`MEM_LIMIT_MB` using Go's memory limits), and garbage collection targets (`GC_PERCENT`) via `.env` file or environment variables.
 - **Case and Symbol Normalization**: Automatically handles case variations, hyphens, and spaces (e.g., searching `HAPPY-GO-LUCKY`, `  happy   go   lucky  `, or `happy_go_lucky` resolves to the same entry).
 - **Deep Semantic Relations**: Resolves and maps complex word-to-word and sense-to-sense relations (synonyms, antonyms, hypernyms, derivations, similar-to, causes, attributes, pertainyms, domain topics, and region classifications) in $O(1)$ time.
 - **Verb Sentence Frames**: Automatically conjugates and conjugates verb templates to construct natural English usage frames (e.g., `"Somebody abashs somebody"`).
@@ -40,7 +49,7 @@ Under a local benchmark stress test (using Apache Bench `ab -n 100000 -c 100 -k`
   - Recursive navigation (clicking any synonym or relation badge searches for that word).
   - Real-time system health and memory usage metrics dashboard.
 - **Embedded Swagger API Playground**: Access standard OpenAPI 3.0 docs and interactively query endpoints directly in the browser.
-- **Production-Ready Middleware**: Pre-configured with native Gzip compression, CORS, JSON output headers, logging, and health checking.
+- **Production-Ready Middleware**: Pre-configured with native Gzip compression, CORS, rate limiting, logging, and health checking.
 
 ---
 
@@ -70,7 +79,25 @@ Vyakhya loads all JSON files concurrently at startup to construct an in-memory p
 2.  **Synset Index**: Pointers to synset contents for immediate dereferencing.
 3.  **Sense Index**: Pointers to individual sense metadata for reverse relationships.
 
-Once loaded, Vyakhya triggers a manual garbage collection call (`runtime.GC()`) to free parsing buffers, dropping idle RAM usage down to ~340MB.
+Once loaded, Vyakhya triggers a manual garbage collection call (`runtime.GC()`) to free parsing buffers, dropping idle RAM usage down to ~180MB.
+
+---
+
+## ⚙️ Configuration (.env)
+
+Vyakhya can be configured dynamically using environment variables or a `.env` file in the root directory. Copy the template to start:
+
+```bash
+cp .env.example .env
+```
+
+| Environment Variable | Description                                                         | Default Value |
+| -------------------- | ------------------------------------------------------------------- | ------------- |
+| `PORT`               | Port to run the HTTP server on                                      | `8080`        |
+| `RATE_LIMIT_RPS`     | Requests-per-second limit per IP client (`0` disables rate limiter) | `10.0`        |
+| `RATE_LIMIT_BURST`   | Maximum request burst size per IP client                            | `20`          |
+| `MEM_LIMIT_MB`       | Memory limit in MB at which Go performs aggressive GC               | `250`         |
+| `GC_PERCENT`         | Target percentage of heap growth relative to active memory          | `50`          |
 
 ---
 
@@ -190,9 +217,9 @@ curl http://localhost:8080/api/v1/stats
 
 ```json
 {
-  "load_time_ms": 1390,
-  "memory_allocated_mb": 346.002,
-  "memory_system_mb": 456.45,
+  "load_time_ms": 5376,
+  "memory_allocated_mb": 180.59,
+  "memory_system_mb": 237.42,
   "total_senses_indexed": 185129,
   "total_synsets_indexed": 107519,
   "total_words_indexed": 128009,
@@ -217,6 +244,7 @@ go test -bench=. ./wordnet -benchmem
 ```
 
 Run a local HTTP API stress test:
+
 1. Compile and start the server in background silent mode (redirecting terminal output logs):
    ```bash
    go build -o vyakhya main.go

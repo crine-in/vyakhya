@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,15 +30,41 @@ import (
 
 // Server handles all API requests.
 type Server struct {
-	Index     *wordnet.Index
-	StartTime time.Time
+	Index       *wordnet.Index
+	StartTime   time.Time
+	rateLimiter *ipRateLimiter
 }
 
 // NewServer creates a new API server.
 func NewServer(idx *wordnet.Index) *Server {
+	var lim *ipRateLimiter
+
+	// Read rate limit config from environment variables
+	rpsVal := 10.0
+	if rpsStr := os.Getenv("RATE_LIMIT_RPS"); rpsStr != "" {
+		if parsed, err := strconv.ParseFloat(rpsStr, 64); err == nil {
+			rpsVal = parsed
+		}
+	}
+
+	burstVal := 20
+	if burstStr := os.Getenv("RATE_LIMIT_BURST"); burstStr != "" {
+		if parsed, err := strconv.Atoi(burstStr); err == nil && parsed > 0 {
+			burstVal = parsed
+		}
+	}
+
+	if rpsVal > 0.0 {
+		lim = newIPRateLimiter(rpsVal, burstVal)
+		log.Printf("Security: Rate limiting enabled (%.2f rps, %d burst)", rpsVal, burstVal)
+	} else {
+		log.Println("Security: Rate limiting is disabled (RATE_LIMIT_RPS <= 0)")
+	}
+
 	return &Server{
-		Index:     idx,
-		StartTime: time.Now(),
+		Index:       idx,
+		StartTime:   time.Now(),
+		rateLimiter: lim,
 	}
 }
 
@@ -55,8 +82,8 @@ func (s *Server) Handler() http.Handler {
 	// UI and docs endpoints
 	mux.HandleFunc("GET /", s.handleLandingPage)
 
-	// Apply middleware: Logging -> CORS -> Gzip
-	return s.loggingMiddleware(s.corsMiddleware(s.gzipMiddleware(mux)))
+	// Apply middleware: Logging -> CORS -> RateLimit -> Gzip
+	return s.loggingMiddleware(s.corsMiddleware(s.rateLimitMiddleware(s.gzipMiddleware(mux))))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +205,23 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		log.Printf("%s %s %s %s", r.Method, r.RequestURI, r.RemoteAddr, time.Since(start))
+	})
+}
+
+// rateLimitMiddleware restricts incoming requests based on client IP.
+func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
+	if s.rateLimiter == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := getIP(r)
+		if !s.rateLimiter.allow(ip) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":"Too many requests. Please try again later."}`))
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 

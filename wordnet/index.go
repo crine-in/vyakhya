@@ -70,12 +70,20 @@ func (idx *Index) Load(dirPath string) error {
 
 	// 1. Read frames.json
 	framesPath := filepath.Join(dirPath, "frames.json")
-	framesBytes, err := os.ReadFile(framesPath)
+	framesFile, err := os.Open(framesPath)
 	if err != nil {
-		return fmt.Errorf("failed to read frames.json: %w", err)
+		return fmt.Errorf("failed to open frames.json: %w", err)
 	}
-	if err := json.Unmarshal(framesBytes, &idx.frames); err != nil {
+	var rawFrames map[string]string
+	if err := json.NewDecoder(framesFile).Decode(&rawFrames); err != nil {
+		framesFile.Close()
 		return fmt.Errorf("failed to parse frames.json: %w", err)
+	}
+	framesFile.Close()
+
+	// Intern all keys and values in frames
+	for k, v := range rawFrames {
+		idx.frames[intern(k)] = intern(v)
 	}
 
 	// 2. Scan all JSON files in the directory
@@ -106,29 +114,32 @@ func (idx *Index) Load(dirPath string) error {
 
 	// Load entries
 	for _, path := range entryFiles {
-		bytes, err := os.ReadFile(path)
+		file, err := os.Open(path)
 		if err != nil {
-			return fmt.Errorf("failed to read entry file %s: %w", path, err)
+			return fmt.Errorf("failed to open entry file %s: %w", path, err)
 		}
 
 		var fileEntries map[string]WordEntry
-		if err := json.Unmarshal(bytes, &fileEntries); err != nil {
+		if err := json.NewDecoder(file).Decode(&fileEntries); err != nil {
+			file.Close()
 			return fmt.Errorf("failed to parse entry file %s: %w", path, err)
 		}
+		file.Close()
 
 		for word, wordEntry := range fileEntries {
-			idx.entries[word] = wordEntry
+			internedWord := intern(word)
+			idx.entries[internedWord] = wordEntry
 
 			// Normalize and index
-			norm := NormalizeWord(word)
-			idx.normIndex[norm] = append(idx.normIndex[norm], word)
+			norm := intern(NormalizeWord(word))
+			idx.normIndex[norm] = append(idx.normIndex[norm], internedWord)
 
 			// Index senses for relation lookup
 			for _, posInfo := range wordEntry {
-				for _, sense := range posInfo.Sense {
+				for _, sense := range posInfo.Info.Sense {
 					if sense.ID != "" {
 						idx.senses[sense.ID] = senseRef{
-							Lemma:    word,
+							Lemma:    internedWord,
 							SynsetID: sense.Synset,
 						}
 					}
@@ -139,18 +150,20 @@ func (idx *Index) Load(dirPath string) error {
 
 	// Load synsets
 	for _, path := range synsetFiles {
-		bytes, err := os.ReadFile(path)
+		file, err := os.Open(path)
 		if err != nil {
-			return fmt.Errorf("failed to read synset file %s: %w", path, err)
+			return fmt.Errorf("failed to open synset file %s: %w", path, err)
 		}
 
 		var fileSynsets map[string]*Synset
-		if err := json.Unmarshal(bytes, &fileSynsets); err != nil {
+		if err := json.NewDecoder(file).Decode(&fileSynsets); err != nil {
+			file.Close()
 			return fmt.Errorf("failed to parse synset file %s: %w", path, err)
 		}
+		file.Close()
 
 		for sid, synset := range fileSynsets {
-			idx.synsets[sid] = synset
+			idx.synsets[intern(sid)] = synset
 		}
 	}
 
@@ -210,7 +223,9 @@ func (idx *Index) Lookup(word string) (*WordResult, bool) {
 			continue
 		}
 
-		for pos, entryInfo := range wordEntry {
+		for _, posEntry := range wordEntry {
+			pos := posEntry.POS
+			entryInfo := posEntry.Info
 			resolvedEntry := ResolvedEntry{
 				PartOfSpeech:   pos,
 				Forms:          entryInfo.Form,
@@ -254,41 +269,14 @@ func (idx *Index) Lookup(word string) (*WordResult, bool) {
 				}
 
 				// 1. Resolve Synset-level relations
-				idx.resolveSynsetRelation(&resSense, "also", synset.Also)
-				idx.resolveSynsetRelation(&resSense, "attribute", synset.Attribute)
-				idx.resolveSynsetRelation(&resSense, "causes", synset.Causes)
-				idx.resolveSynsetRelation(&resSense, "domain_region", synset.DomainRegion)
-				idx.resolveSynsetRelation(&resSense, "domain_topic", synset.DomainTopic)
-				idx.resolveSynsetRelation(&resSense, "entails", synset.Entails)
-				idx.resolveSynsetRelation(&resSense, "exemplifies", synset.Exemplifies)
-				idx.resolveSynsetRelation(&resSense, "hypernym", synset.Hypernym)
-				idx.resolveSynsetRelation(&resSense, "mero_member", synset.MeroMember)
-				idx.resolveSynsetRelation(&resSense, "mero_part", synset.MeroPart)
-				idx.resolveSynsetRelation(&resSense, "mero_substance", synset.MeroSubstance)
-				idx.resolveSynsetRelation(&resSense, "similar", synset.Similar)
+				for _, r := range synset.Relations {
+					idx.resolveSynsetRelation(&resSense, r.Rel, r.Targets)
+				}
 
 				// 2. Resolve Sense-level relations
-				idx.resolveSenseRelation(&resSense, "agent", sense.Agent)
-				idx.resolveSenseRelation(&resSense, "also", sense.Also)
-				idx.resolveSenseRelation(&resSense, "antonym", sense.Antonym)
-				idx.resolveSenseRelation(&resSense, "body_part", sense.BodyPart)
-				idx.resolveSenseRelation(&resSense, "by_means_of", sense.ByMeansOf)
-				idx.resolveSenseRelation(&resSense, "derivation", sense.Derivation)
-				idx.resolveSenseRelation(&resSense, "destination", sense.Destination)
-				idx.resolveSenseRelation(&resSense, "event", sense.Event)
-				idx.resolveSenseRelation(&resSense, "exemplifies", sense.Exemplifies)
-				idx.resolveSenseRelation(&resSense, "instrument", sense.Instrument)
-				idx.resolveSenseRelation(&resSense, "location", sense.Location)
-				idx.resolveSenseRelation(&resSense, "material", sense.Material)
-				idx.resolveSenseRelation(&resSense, "participle", sense.Participle)
-				idx.resolveSenseRelation(&resSense, "pertainym", sense.Pertainym)
-				idx.resolveSenseRelation(&resSense, "property", sense.Property)
-				idx.resolveSenseRelation(&resSense, "result", sense.Result)
-				idx.resolveSenseRelation(&resSense, "similar", sense.Similar)
-				idx.resolveSenseRelation(&resSense, "state", sense.State)
-				idx.resolveSenseRelation(&resSense, "undergoer", sense.Undergoer)
-				idx.resolveSenseRelation(&resSense, "uses", sense.Uses)
-				idx.resolveSenseRelation(&resSense, "vehicle", sense.Vehicle)
+				for _, r := range sense.Relations {
+					idx.resolveSenseRelation(&resSense, r.Rel, r.Targets)
+				}
 
 				resolvedEntry.Senses = append(resolvedEntry.Senses, resSense)
 			}

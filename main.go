@@ -16,19 +16,79 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"runtime/debug"
+	"strconv"
+	"strings"
 	"time"
 	"vyakhya/api"
 	"vyakhya/wordnet"
 )
 
+// loadEnv parses a .env file and sets environment variables if not already set.
+func loadEnv(path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		return // Ignore if file doesn't exist
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		// Strip quotes if present
+		if (strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"")) ||
+			(strings.HasPrefix(val, "'") && strings.HasSuffix(val, "'")) {
+			val = val[1 : len(val)-1]
+		}
+		if os.Getenv(key) == "" {
+			os.Setenv(key, val)
+		}
+	}
+}
+
 func main() {
-	port := flag.String("port", "8080", "Port to run the server on")
+	loadEnv(".env")
+
+	defaultPort := "8080"
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		defaultPort = envPort
+	}
+
+	port := flag.String("port", defaultPort, "Port to run the server on")
 	datasetPath := flag.String("dataset", "./english-wordnet", "Path to the english-wordnet JSON folder")
 	flag.Parse()
+
+	// Apply Memory Limits from Env
+	if memLimitStr := os.Getenv("MEM_LIMIT_MB"); memLimitStr != "" {
+		if limitMB, err := strconv.Atoi(memLimitStr); err == nil && limitMB > 0 {
+			limitBytes := int64(limitMB) * 1024 * 1024
+			debug.SetMemoryLimit(limitBytes)
+			log.Printf("Security: Memory limit set to %d MB (%d bytes)", limitMB, limitBytes)
+		}
+	}
+
+	// Apply GC Target from Env
+	if gcPercentStr := os.Getenv("GC_PERCENT"); gcPercentStr != "" {
+		if percent, err := strconv.Atoi(gcPercentStr); err == nil && percent > 0 {
+			debug.SetGCPercent(percent)
+			log.Printf("Security: Go GC target percent set to %d%%", percent)
+		}
+	}
 
 	log.Println("Initializing Vyakhya Dictionary Indexer...")
 	idx := wordnet.NewIndex()

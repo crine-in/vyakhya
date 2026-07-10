@@ -50,16 +50,14 @@ header {
 
 .logo-area {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.75rem;
 }
 
-.logo-title {
-    font-family: var(--font-display);
-    font-weight: 800;
-    font-size: 1.4rem;
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
+.header-logo {
+    height: 30px;
+    width: auto;
+    display: block;
 }
 
 .logo-sub {
