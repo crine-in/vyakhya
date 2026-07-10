@@ -21,6 +21,7 @@ import (
 	"net/http"
 )
 
+//go:embed web/*
 var webFS embed.FS
 
 // handleLandingPage serves the premium search interface and docs.
