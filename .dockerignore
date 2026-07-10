@@ -1,0 +1,14 @@
+.git
+.gitignore
+.idea
+.vscode
+vyakhya_server
+*.test
+*.prof
+*.out
+Dockerfile
+LICENSE
+README.md
+task.md
+walkthrough.md
+implementation_plan.md
