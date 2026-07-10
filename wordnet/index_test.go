@@ -16,6 +16,7 @@
 package wordnet
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -103,6 +104,28 @@ func hasWord(s, word string) bool {
 	return len(s) > 0 // Just generic verification
 }
 
+func TestIndexSuggest(t *testing.T) {
+	idx := NewIndex()
+	err := idx.Load("../english-wordnet")
+	if err != nil {
+		t.Fatalf("Failed to load: %v", err)
+	}
+
+	suggestions := idx.Suggest("happ", 5)
+	if len(suggestions) == 0 {
+		t.Error("No suggestions returned for prefix 'happ'")
+	}
+	t.Logf("Suggestions for 'happ': %v", suggestions)
+
+	// Verify prefix
+	for _, sugg := range suggestions {
+		normSugg := NormalizeWord(sugg)
+		if !strings.HasPrefix(normSugg, "happ") {
+			t.Errorf("Suggestion %q does not start with prefix 'happ'", sugg)
+		}
+	}
+}
+
 func BenchmarkLookup(b *testing.B) {
 	idx := NewIndex()
 	_ = idx.Load("../english-wordnet")
@@ -110,5 +133,15 @@ func BenchmarkLookup(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = idx.Lookup("happy")
+	}
+}
+
+func BenchmarkSuggest(b *testing.B) {
+	idx := NewIndex()
+	_ = idx.Load("../english-wordnet")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = idx.Suggest("happ", 10)
 	}
 }

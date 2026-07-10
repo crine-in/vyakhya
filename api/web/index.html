@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vyākhyā — High-Performance WordNet Engine</title>
+    <meta name="description" content="A ultra-fast, zero-dependency, open-source English WordNet dictionary API and explorer.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <!-- Swagger UI CSS -->
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.9.0/swagger-ui.css" />
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+    <header>
+        <div class="logo-area">
+            <span class="logo-title">Vyākhyā</span>
+            <span class="logo-sub">dictionary engine</span>
+        </div>
+        <nav>
+            <button class="nav-btn active" id="btn-explorer" onclick="switchTab('explorer')">Explorer</button>
+            <button class="nav-btn" id="btn-docs" onclick="switchTab('docs')">API Playground</button>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Explorer Tab -->
+        <div id="tab-explorer" class="tab-content active">
+            <div class="explorer-layout">
+                
+                <!-- Left Sidebar: History and Bookmarks -->
+                <aside class="sidebar-left">
+                    <div class="sidebar-section">
+                        <div class="sidebar-header">
+                            <h2>Bookmarks</h2>
+                            <span class="count-badge" id="bookmarks-count">0</span>
+                        </div>
+                        <ul class="flat-list" id="bookmarks-list">
+                            <li class="empty-state">No bookmarked words</li>
+                        </ul>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-header">
+                            <h2>Recent Searches</h2>
+                            <button class="text-link-btn" onclick="clearHistory()">Clear</button>
+                        </div>
+                        <ul class="flat-list" id="history-list">
+                            <li class="empty-state">No recent searches</li>
+                        </ul>
+                    </div>
+                </aside>
+
+                <!-- Center Area: Search and Definitions -->
+                <section class="search-section">
+                    <div class="search-bar-wrap">
+                        <div class="input-row">
+                            <div class="input-prefix-icon">
+                                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                            </div>
+                            <input type="text" id="search-input" placeholder="search for a word..." autocomplete="off" onkeydown="handleSearchInputKey(event)">
+                            <button class="clear-input-btn" id="clear-btn" onclick="clearSearchInput()" style="display: none;">&times;</button>
+                        </div>
+                        
+                        <!-- Suggestion dropdown -->
+                        <div class="suggestions-dropdown" id="suggestions-box" style="display: none;"></div>
+                    </div>
+
+                    <div id="results-area">
+                        <!-- Default welcome state -->
+                        <div class="welcome-screen">
+                            <div class="welcome-heading">Linguistic Knowledge Graph</div>
+                            <p class="welcome-desc">
+                                Search for words to traverse the complete WordNet lexical database. Clicking on relations, synonyms, or derivation lines allows you to walk through semantic connections in real-time.
+                            </p>
+                            <div class="suggested-chips-label">Try searching:</div>
+                            <div class="suggested-chips">
+                                <button class="chip-btn" onclick="performSearch('serendipity')">serendipity</button>
+                                <button class="chip-btn" onclick="performSearch('ephemeral')">ephemeral</button>
+                                <button class="chip-btn" onclick="performSearch('antigravity')">antigravity</button>
+                                <button class="chip-btn" onclick="performSearch('mellifluous')">mellifluous</button>
+                                <button class="chip-btn" onclick="performSearch('codex')">codex</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Right Sidebar: Stats -->
+                <aside class="sidebar-right">
+                    <div class="sidebar-section stats-section">
+                        <div class="sidebar-header border-b">
+                            <h2>Telemetry</h2>
+                            <button class="refresh-btn" onclick="fetchStats()">Refresh</button>
+                        </div>
+                        <div class="stats-grid">
+                            <div class="stat-row">
+                                <span class="stat-lbl">words indexed</span>
+                                <span class="stat-num" id="stat-words">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-lbl">synsets indexed</span>
+                                <span class="stat-num" id="stat-synsets">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-lbl">senses indexed</span>
+                                <span class="stat-num" id="stat-senses">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-lbl">indexer load time</span>
+                                <span class="stat-num" id="stat-load">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-lbl">heap allocated</span>
+                                <span class="stat-num" id="stat-alloc">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-lbl">sys allocated</span>
+                                <span class="stat-num" id="stat-sys">-</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-lbl">server uptime</span>
+                                <span class="stat-num" id="stat-uptime">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+
+            </div>
+        </div>
+
+        <!-- Documentation Tab -->
+        <div id="tab-docs" class="tab-content">
+            <div id="swagger-ui"></div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <span>&copy; 2026 CRINE. Open source under the AGPL-3.0 License.</span>
+            <div class="footer-links">
+                <a href="https://www.crine.in" target="_blank">crine.in</a>
+                <a href="mailto:support@crine.in">support@crine.in</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Swagger UI Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.9.0/swagger-ui-bundle.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.9.0/swagger-ui-standalone-preset.js"></script>
+    
+    <script src="/app.js"></script>
+</body>
+</html>

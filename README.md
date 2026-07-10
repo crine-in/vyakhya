@@ -34,7 +34,7 @@ Under a local benchmark stress test (using Apache Bench `ab -n 100000 -c 100 -k`
 - **Deep Semantic Relations**: Resolves and maps complex word-to-word and sense-to-sense relations (synonyms, antonyms, hypernyms, derivations, similar-to, causes, attributes, pertainyms, domain topics, and region classifications) in $O(1)$ time.
 - **Verb Sentence Frames**: Automatically conjugates and conjugates verb templates to construct natural English usage frames (e.g., `"Somebody abashs somebody"`).
 - **Polymorphic JSON Handling**: Tailored custom unmarshalers handle mixed WordNet schemas (like `wikidata` codes mapped to arrays/strings and `example` usage objects with/without source attribution).
-- **Embedded UI Explorer**: A beautiful, dark-themed, glassmorphic search interface served at `/` with:
+- **Embedded UI Explorer**: A beautiful, dark-themed, flat, cinematic, and monochrome search interface served at `/` with:
   - Live interactive word lookup.
   - Browser text-to-speech pronunciation.
   - Recursive navigation (clicking any synonym or relation badge searches for that word).
@@ -51,7 +51,7 @@ vyakhya/
 ├── api/
 │   ├── router.go          # HTTP routing, middleware (gzip, CORS, logging), and JSON openapi spec
 │   ├── router_test.go     # HTTP endpoint unit tests and middleware verification
-│   └── templates.go       # Embedded dark-themed glassmorphic lookup explorer & Swagger UI
+│   └── templates.go       # Embedded dark-themed monochrome lookup explorer & Swagger UI
 ├── english-wordnet/       # Directory containing WordNet JSON files
 │   └── frames.json        # Verb subcategorization frame mappings
 ├── wordnet/

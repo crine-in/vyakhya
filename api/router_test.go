@@ -163,4 +163,33 @@ func TestAPIServer(t *testing.T) {
 			t.Errorf("Expected Content-Encoding: gzip, got %q", contentEncoding)
 		}
 	})
+
+	t.Run("Suggest Endpoint", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/suggest?q=happ&limit=5", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+
+		var suggestions []string
+		if err := json.Unmarshal(w.Body.Bytes(), &suggestions); err != nil {
+			t.Fatalf("Failed to parse suggest body: %v", err)
+		}
+
+		if len(suggestions) == 0 {
+			t.Error("Expected at least one suggestion, got none")
+		}
+	})
+
+	t.Run("Landing Page Embedded Files", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+	})
 }

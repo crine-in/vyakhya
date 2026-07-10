@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -28,13 +29,14 @@ import (
 
 // Index holds all parsed WordNet data and fast lookup indexes.
 type Index struct {
-	frames       map[string]string
-	entries      map[string]WordEntry
-	synsets      map[string]*Synset
-	senses       map[string]senseRef
-	normIndex    map[string][]string // Maps normalized word (lowercase, no hyphens/underscores) to original case words
-	loadDuration time.Duration
-	mu           sync.RWMutex
+	frames         map[string]string
+	entries        map[string]WordEntry
+	synsets        map[string]*Synset
+	senses         map[string]senseRef
+	normIndex      map[string][]string // Maps normalized word (lowercase, no hyphens/underscores) to original case words
+	sortedNormKeys []string            // Sorted keys of normIndex for fast prefix search
+	loadDuration   time.Duration
+	mu             sync.RWMutex
 }
 
 type senseRef struct {
@@ -151,6 +153,13 @@ func (idx *Index) Load(dirPath string) error {
 			idx.synsets[sid] = synset
 		}
 	}
+
+	// 3. Build and sort key list for autocomplete prefix searches
+	idx.sortedNormKeys = make([]string, 0, len(idx.normIndex))
+	for k := range idx.normIndex {
+		idx.sortedNormKeys = append(idx.sortedNormKeys, k)
+	}
+	sort.Strings(idx.sortedNormKeys)
 
 	idx.loadDuration = time.Since(startTime)
 
@@ -350,4 +359,44 @@ func (idx *Index) resolveSenseRelation(resSense *ResolvedSense, relName string, 
 	if len(resolved.Senses) > 0 {
 		resSense.Relations = append(resSense.Relations, resolved)
 	}
+}
+
+// Suggest returns up to limit suggestions matching the given prefix.
+func (idx *Index) Suggest(prefix string, limit int) []string {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	norm := NormalizeWord(prefix)
+	if norm == "" {
+		return nil
+	}
+
+	// Binary search for the first key >= norm
+	idxStart := sort.Search(len(idx.sortedNormKeys), func(i int) bool {
+		return idx.sortedNormKeys[i] >= norm
+	})
+
+	results := make([]string, 0, limit)
+	for i := idxStart; i < len(idx.sortedNormKeys); i++ {
+		key := idx.sortedNormKeys[i]
+		if !strings.HasPrefix(key, norm) {
+			break // No more keys can have this prefix since slice is sorted
+		}
+		for _, orig := range idx.normIndex[key] {
+			alreadyAdded := false
+			for _, r := range results {
+				if r == orig {
+					alreadyAdded = true
+					break
+				}
+			}
+			if !alreadyAdded {
+				results = append(results, orig)
+				if len(results) >= limit {
+					return results
+				}
+			}
+		}
+	}
+	return results
 }

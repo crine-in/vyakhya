@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"vyakhya/wordnet"
@@ -48,6 +49,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/stats", s.handleStats)
 	mux.HandleFunc("GET /api/v1/word/{word}", s.handleWordLookup)
+	mux.HandleFunc("GET /api/v1/suggest", s.handleSuggest)
 	mux.HandleFunc("GET /api/v1/openapi.json", s.handleOpenAPI)
 
 	// UI and docs endpoints
@@ -93,6 +95,33 @@ func (s *Server) handleWordLookup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) handleSuggest(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	q = strings.TrimSpace(q)
+	if q == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
+		return
+	}
+
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	suggestions := s.Index.Suggest(q, limit)
+	if suggestions == nil {
+		suggestions = []string{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(suggestions)
 }
 
 func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
@@ -202,6 +231,42 @@ const OpenAPISpec = `{
                     "memory_system_mb": { "type": "number", "example": 250.8 },
                     "uptime_seconds": { "type": "integer", "example": 3600 }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/suggest": {
+      "get": {
+        "summary": "Prefix Autocomplete Suggestions",
+        "description": "Retrieve up to [limit] matching dictionary lemmas starting with a prefix query string.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Prefix query string to find matching suggestions",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Max number of suggestions to return (default is 10)",
+            "schema": { "type": "integer", "default": 10 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of matching suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "example": ["happy", "happiness", "happily"]
                 }
               }
             }
